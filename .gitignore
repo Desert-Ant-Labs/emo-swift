@@ -1,0 +1,30 @@
+# macOS
+.DS_Store
+
+# SwiftPM / Xcode build output
+.build/
+build/
+DerivedData/
+
+# Xcode user state
+*.xcuserstate
+xcuserdata/
+.swiftpm/xcode/
+
+# Formatter config (local only)
+.swiftformat
+
+
+# training venv / caches
+training/.venv/
+training/__pycache__/
+
+# training generated data / model artifacts
+training/data/
+training/runs/
+training/labels.json
+training/*.npz
+training/*.pt
+training/*.onnx
+training/*.onnx.data
+training/*.mlpackage/
