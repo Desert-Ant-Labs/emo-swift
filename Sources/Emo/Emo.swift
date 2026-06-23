@@ -38,7 +38,7 @@ public enum EmoError: Error, LocalizedError, Sendable {
 /// Predicts emojis for short task, calendar, or message text.
 ///
 /// Emo runs fully on-device using a small bundled Core ML model (~3.2 MB) plus a
-/// ~0.55 MB tokenizer, across 22 languages.
+/// ~0.55 MB tokenizer, across 23 languages.
 ///
 /// ```swift
 /// let suggestions = try await Emo.suggestions(for: "Pay my bills")
