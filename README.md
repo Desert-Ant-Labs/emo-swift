@@ -17,7 +17,7 @@ let toned = try await Emo.suggestions(for: "go for a run", limit: 1, skinTone: .
 
 - Runs fully on-device using Core ML
 - Suggests from a data-driven vocabulary of ~300 task/calendar/message emojis
-- Supports 22 languages (incl. CJK, Arabic, Thai, Hindi, …)
+- Supports 23 languages (incl. CJK, Arabic, Thai, Hindi, …)
 - Bundled model + tokenizer are about 5.0 MB
 - Prediction is typically well under 2 ms on modern iPhones
 - No network access required
