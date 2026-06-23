@@ -27,7 +27,7 @@ let toned = try await Emo.suggestions(for: "go for a run", limit: 1, skinTone: .
 Add this package to your app with Swift Package Manager.
 
 ```swift
-.package(url: "https://github.com/Desert-Ant-Labs/emo-swift.git", from: "0.2.0")
+.package(url: "https://github.com/Desert-Ant-Labs/emo-swift.git", from: "0.3.0")
 ```
 
 Then add the `Emo` product to your app target.
