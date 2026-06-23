@@ -27,7 +27,7 @@ let toned = try await Emo.suggestions(for: "go for a run", limit: 1, skinTone: .
 Add this package to your app with Swift Package Manager.
 
 ```swift
-.package(url: "https://github.com/Desert-Ant-Labs/emo-swift.git", from: "0.2.0")
+.package(url: "https://github.com/Desert-Ant-Labs/emo-swift.git", from: "0.3.0")
 ```
 
 Then add the `Emo` product to your app target.
@@ -78,8 +78,8 @@ A minimal example app is included in `Examples/EmoExample`.
 
 ## Model
 
-The bundled model is published at [`desert-ant-labs/emo`](https://huggingface.co/desert-ant-labs/emo) on Hugging Face — full weights, the compiled Core ML build, and the model card.
+The bundled model is published at [`desert-ant-labs/emo`](https://huggingface.co/desert-ant-labs/emo) on Hugging Face: full weights, the compiled Core ML build, and the model card.
 
 ## License
 
-See [`LICENSE.md`](LICENSE.md) — Desert Ant Labs Source-Available License v1.0. Free for commercial use up to 100,000 MAU per Model; <licensing@desertant.ai> above that.
+See [`LICENSE.md`](LICENSE.md). Desert Ant Labs Source-Available License v1.0. Free for commercial use up to 100,000 MAU per Model; contact <licensing@desertant.ai> above that.
