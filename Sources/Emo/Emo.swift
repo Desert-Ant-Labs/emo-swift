@@ -43,6 +43,7 @@ public enum EmoError: Error, LocalizedError, Sendable {
 /// ```swift
 /// let suggestions = try await Emo.suggestions(for: "Pay my bills")
 /// let emoji = try await Emo.suggestions(for: "犬の散歩", limit: 1).first?.emoji  // "🐕"
+/// let toned = try await Emo.suggestions(for: "go for a run", limit: 1, skinTone: .medium).first?.emoji  // "🏃🏽"
 /// ```
 public enum Emo {
     /// Returns emoji suggestions for a phrase, sorted from most to least likely.
@@ -50,8 +51,9 @@ public enum Emo {
     /// - Parameters:
     ///   - text: A short task, calendar entry, note, or message draft.
     ///   - limit: The maximum number of suggestions to return. Pass `1` for only the best emoji.
+    ///   - skinTone: Preferred skin tone for skin-tone-capable emoji. Defaults to ``EmojiSkinTone/default``.
     /// - Returns: Up to `limit` emoji suggestions. Empty input returns an empty array.
-    public static func suggestions(for text: String, limit: Int = 3) async throws -> [EmoSuggestion] {
+    public static func suggestions(for text: String, limit: Int = 3, skinTone: EmojiSkinTone = .default) async throws -> [EmoSuggestion] {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return [] }
 
@@ -113,7 +115,7 @@ public enum Emo {
         return probs
             .sorted { $0.1 > $1.1 }
             .prefix(max(0, limit))
-            .map { EmoSuggestion(emoji: $0.0, confidence: $0.1) }
+            .map { EmoSuggestion(emoji: $0.0.applyingSkinTone(skinTone), confidence: $0.1) }
     }
 
     private struct Config: Decodable {

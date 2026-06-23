@@ -8,6 +8,9 @@ let suggestions = try await Emo.suggestions(for: "Pay my bills")
 
 let emoji = try await Emo.suggestions(for: "犬の散歩", limit: 1).first?.emoji
 // "🐕"
+
+let toned = try await Emo.suggestions(for: "go for a run", limit: 1, skinTone: .medium).first?.emoji
+// "🏃🏽"
 ```
 
 ## Features
@@ -51,7 +54,15 @@ let best = try await Emo.suggestions(for: "bike to work", limit: 1).first?.emoji
 
 ```swift
 public enum Emo {
-    public static func suggestions(for text: String, limit: Int = 3) async throws -> [EmoSuggestion]
+    public static func suggestions(
+        for text: String,
+        limit: Int = 3,
+        skinTone: EmojiSkinTone = .default
+    ) async throws -> [EmoSuggestion]
+}
+
+public enum EmojiSkinTone: Sendable, Equatable {
+    case `default`, light, mediumLight, medium, mediumDark, dark
 }
 
 public struct EmoSuggestion: Identifiable, Sendable, Equatable {
