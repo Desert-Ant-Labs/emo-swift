@@ -29,4 +29,11 @@ struct EmoTests {
     @Test func emptyInput() async throws {
         #expect(try await Emo.suggestions(for: "   ").isEmpty)
     }
+
+    @Test func skinTonePostprocessing() {
+        #expect("🏃".applyingSkinTone(.medium) == "🏃🏽")
+        #expect("🧑‍🍳".applyingSkinTone(.dark) == "🧑🏿‍🍳")
+        #expect("✍️".applyingSkinTone(.light) == "✍🏻")
+        #expect("🐕".applyingSkinTone(.medium) == "🐕")
+    }
 }
