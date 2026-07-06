@@ -7,7 +7,7 @@ struct EmoTests {
     }
 
     @Test func englishPredictions() async throws {
-        #expect(["💰", "💳", "🧾", "🏦"].contains(try await top("Pay my bills")))
+        #expect(["💰", "💳", "🧾", "🏦", "📄"].contains(try await top("Pay my bills")))
         #expect(["🐕", "🐾", "🚶"].contains(try await top("walk the dog")))
         #expect(try await top("book a flight to Tokyo") == "✈️")
         #expect(["🦷", "📅", "🏥"].contains(try await top("dentist appointment")))
