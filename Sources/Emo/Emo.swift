@@ -37,8 +37,8 @@ public enum EmoError: Error, LocalizedError, Sendable {
 
 /// Predicts emojis for short task, calendar, or message text.
 ///
-/// Emo runs fully on-device using a small bundled Core ML model (~3.2 MB) plus a
-/// ~0.55 MB tokenizer, across 23 languages.
+/// Emo runs fully on-device using a small bundled Core ML model (~4.3 MB) plus a
+/// ~0.73 MB tokenizer, across 23 languages.
 ///
 /// ```swift
 /// let suggestions = try await Emo.suggestions(for: "Pay my bills")
@@ -104,14 +104,14 @@ public enum Emo {
             try loaded.model.prediction(from: provider)
         }
 
-        guard let raw = output.featureValue(for: "classLabel_probs")?.dictionaryValue else {
-            throw EmoError.predictionFailed
-        }
+        // The transformer model outputs a raw probability vector; map indices to labels.
+        let outValue = output.featureValue(for: "probabilities")
+            ?? output.featureNames.lazy.compactMap { output.featureValue(for: $0) }.first { $0.multiArrayValue != nil }
+        guard let arr = outValue?.multiArrayValue else { throw EmoError.predictionFailed }
+        let labels = cfg.labels
         var probs: [(String, Double)] = []
-        probs.reserveCapacity(raw.count)
-        for (key, value) in raw {
-            if let emoji = key as? String { probs.append((emoji, value.doubleValue)) }
-        }
+        probs.reserveCapacity(labels.count)
+        for i in 0..<min(labels.count, arr.count) { probs.append((labels[i], arr[i].doubleValue)) }
         return probs
             .sorted { $0.1 > $1.1 }
             .prefix(max(0, limit))
@@ -123,10 +123,12 @@ public enum Emo {
         let nBuckets: Int
         let nImportance: Int
         let semPadIndex: Int
+        let labels: [String]
 
         enum CodingKeys: String, CodingKey {
             case nHashes = "n_hashes", nBuckets = "n_buckets"
             case nImportance = "n_importance", semPadIndex = "sem_pad_index"
+            case labels
         }
     }
 

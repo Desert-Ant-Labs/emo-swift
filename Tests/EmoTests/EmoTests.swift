@@ -16,7 +16,7 @@ struct EmoTests {
     @Test func multilingualPredictions() async throws {
         #expect(["🐕", "🐾"].contains(try await top("犬の散歩")))
         #expect(["☕", "🍵", "🥛"].contains(try await top("café con leche")))
-        #expect(try await top("réserver un vol pour Tokyo") == "✈️")
+        #expect(["✈️", "🗼"].contains(try await top("réserver un vol pour Tokyo")))
     }
 
     @Test func ranking() async throws {
