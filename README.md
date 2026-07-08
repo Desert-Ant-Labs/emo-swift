@@ -1,4 +1,6 @@
-Emo is a small on-device Swift package that suggests emojis for short tasks, calendar entries, or phrases.
+# Emo: On-device Emoji Suggestions for Swift (iOS, macOS)
+
+Emo is a small on-device Swift package for emoji suggestion: it predicts relevant emoji from short text like tasks, calendar entries, or phrases. It runs offline, needs no network, and is multilingual, so it fits keyboard and autocomplete features. Emo suggests emoji from text; it is not an emoji picker.
 
 ```swift
 import Emo
@@ -79,6 +81,14 @@ A minimal example app is included in `Examples/EmoExample`.
 ## Model
 
 The bundled model is published at [`desert-ant-labs/emo`](https://huggingface.co/desert-ant-labs/emo) on Hugging Face: full weights, the compiled Core ML build, and the model card.
+
+## Other platforms
+
+Same model, native on each platform:
+
+- [`emo-kotlin`](https://github.com/Desert-Ant-Labs/emo-kotlin): Kotlin for Android and JVM
+- [`emo-js`](https://github.com/Desert-Ant-Labs/emo-js): JavaScript and TypeScript for Node and browser
+- Model weights and card: [`desert-ant-labs/emo`](https://huggingface.co/desert-ant-labs/emo)
 
 ## License
 
