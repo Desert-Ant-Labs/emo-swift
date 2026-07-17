@@ -1,0 +1,128 @@
+[
+  {
+    "metadataOutputVersion" : "3.0",
+    "shortDescription" : "Suggests an emoji for a short phrase. Inputs are tokenized features (n-gram hashes + pruned unigram semantic ids) in a fixed window.",
+    "outputSchema" : [
+      {
+        "hasShapeFlexibility" : "0",
+        "isOptional" : "0",
+        "dataType" : "Float16",
+        "formattedType" : "MultiArray (Float16 1 × 812)",
+        "shortDescription" : "",
+        "shape" : "[1, 812]",
+        "name" : "probabilities",
+        "type" : "MultiArray"
+      }
+    ],
+    "storagePrecision" : "Mixed (Float16, Palettized (4 bits), Palettized (8 bits))",
+    "modelParameters" : [
+
+    ],
+    "specificationVersion" : 7,
+    "mlProgramOperationTypeHistogram" : {
+      "Concat" : 3,
+      "Ios16.cast" : 7,
+      "Ios16.mul" : 15,
+      "Ios16.layerNorm" : 5,
+      "SliceByIndex" : 30,
+      "Ios16.constexprLutToDense" : 14,
+      "Ios16.sub" : 1,
+      "Ios16.linear" : 11,
+      "Ios16.add" : 13,
+      "Ios16.realDiv" : 1,
+      "Ios16.matmul" : 16,
+      "Ios16.softmax" : 10,
+      "Ios16.reduceSum" : 4,
+      "ExpandDims" : 3,
+      "Ios16.gather" : 3,
+      "Ios16.gelu" : 3,
+      "Ios16.tanh" : 1
+    },
+    "computePrecision" : "Mixed (Float16, Float32, Int32)",
+    "isUpdatable" : "0",
+    "stateSchema" : [
+
+    ],
+    "availability" : {
+      "macOS" : "13.0",
+      "tvOS" : "16.0",
+      "visionOS" : "1.0",
+      "watchOS" : "9.0",
+      "iOS" : "16.0",
+      "macCatalyst" : "16.0"
+    },
+    "modelType" : {
+      "name" : "MLModelType_mlProgram"
+    },
+    "inputSchema" : [
+      {
+        "hasShapeFlexibility" : "0",
+        "isOptional" : "0",
+        "dataType" : "Int32",
+        "formattedType" : "MultiArray (Int32 1 × 512 × 3)",
+        "shortDescription" : "",
+        "shape" : "[1, 512, 3]",
+        "name" : "ngram_buckets",
+        "type" : "MultiArray"
+      },
+      {
+        "hasShapeFlexibility" : "0",
+        "isOptional" : "0",
+        "dataType" : "Float32",
+        "formattedType" : "MultiArray (Float32 1 × 512 × 3)",
+        "shortDescription" : "",
+        "shape" : "[1, 512, 3]",
+        "name" : "ngram_signs",
+        "type" : "MultiArray"
+      },
+      {
+        "hasShapeFlexibility" : "0",
+        "isOptional" : "0",
+        "dataType" : "Int32",
+        "formattedType" : "MultiArray (Int32 1 × 512)",
+        "shortDescription" : "",
+        "shape" : "[1, 512]",
+        "name" : "ngram_importance",
+        "type" : "MultiArray"
+      },
+      {
+        "hasShapeFlexibility" : "0",
+        "isOptional" : "0",
+        "dataType" : "Float32",
+        "formattedType" : "MultiArray (Float32 1 × 1)",
+        "shortDescription" : "",
+        "shape" : "[1, 1]",
+        "name" : "ngram_count",
+        "type" : "MultiArray"
+      },
+      {
+        "hasShapeFlexibility" : "0",
+        "isOptional" : "0",
+        "dataType" : "Int32",
+        "formattedType" : "MultiArray (Int32 1 × 64)",
+        "shortDescription" : "",
+        "shape" : "[1, 64]",
+        "name" : "sem_ids",
+        "type" : "MultiArray"
+      },
+      {
+        "hasShapeFlexibility" : "0",
+        "isOptional" : "0",
+        "dataType" : "Float32",
+        "formattedType" : "MultiArray (Float32 1 × 64)",
+        "shortDescription" : "",
+        "shape" : "[1, 64]",
+        "name" : "sem_mask",
+        "type" : "MultiArray"
+      }
+    ],
+    "userDefinedMetadata" : {
+      "com.github.apple.coremltools.conversion_date" : "2026-07-17",
+      "com.github.apple.coremltools.source" : "torch==2.8.0",
+      "com.github.apple.coremltools.version" : "9.0",
+      "com.github.apple.coremltools.source_dialect" : "TorchScript"
+    },
+    "generatedClassName" : "emo",
+    "method" : "predict"
+  }
+]

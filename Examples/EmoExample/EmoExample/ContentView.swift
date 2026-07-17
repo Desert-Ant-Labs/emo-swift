@@ -1,6 +1,10 @@
 import Emo
 import SwiftUI
 
+// One shared suggester, reused across the app. Construction is cheap and the
+// model loads (downloading on demand) on first use.
+private let emo = Emo()
+
 
 struct Todo: Identifiable, Codable, Equatable {
     var id = UUID()
@@ -280,7 +284,7 @@ struct AddTodoView: View {
             try? await Task.sleep(for: .milliseconds(200))
             guard !Task.isCancelled else { return }
 
-            let next = (try? await Emo.suggestions(for: trimmed, limit: 1))?.first?.emoji
+            let next = (try? await emo.suggestions(for: trimmed, limit: 1))?.first?.emoji
             guard !Task.isCancelled, let next else { return }
 
             await MainActor.run {
@@ -295,7 +299,7 @@ struct AddTodoView: View {
 
         predictionTask?.cancel()
         Task {
-            let predicted = (try? await Emo.suggestions(for: title, limit: 1))?.first?.emoji
+            let predicted = (try? await emo.suggestions(for: title, limit: 1))?.first?.emoji
             onSave(Todo(title: title, emoji: predicted ?? emoji))
             dismiss()
         }

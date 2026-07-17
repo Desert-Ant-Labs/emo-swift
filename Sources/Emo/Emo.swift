@@ -1,7 +1,6 @@
-import CoreML
-import Foundation
+import PlatformSupport
 
-/// A single emoji suggestion returned by ``Emo/suggestions(for:limit:)``.
+/// A single emoji suggestion returned by ``Emo/suggestions(for:limit:skinTone:)``.
 public struct EmoSuggestion: Identifiable, Sendable, Equatable {
     init(emoji: String, confidence: Double) {
         id = emoji
@@ -19,142 +18,129 @@ public struct EmoSuggestion: Identifiable, Sendable, Equatable {
     public let confidence: Double
 }
 
-/// Errors that can occur while loading or running the bundled emoji model.
-public enum EmoError: Error, LocalizedError, Sendable {
-    /// A bundled resource (model, tokenizer, or metadata) could not be found.
+/// Errors thrown while loading or running the model. (`MessageError` is
+/// `LocalizedError` wherever Foundation exists, so `localizedDescription`
+/// shows `message`.)
+public enum EmoError: MessageError, Sendable {
+    /// A model resource (model, tokenizer, or metadata) could not be found.
     case modelNotFound
-
-    /// Core ML prediction failed or returned an unexpected output.
+    /// On-device prediction failed or returned an unexpected output.
     case predictionFailed
 
-    public var errorDescription: String? {
+    public var message: String {
         switch self {
-        case .modelNotFound: "An Emo model resource was not found in the package bundle."
-        case .predictionFailed: "Emoji prediction failed."
+        case .modelNotFound: "An Emo model resource was not found."
+        case .predictionFailed: "On-device emoji prediction failed."
         }
     }
 }
 
-/// Predicts emojis for short task, calendar, or message text.
+/// On-device emoji suggestion for short tasks, calendar entries, or messages.
 ///
-/// Emo runs fully on-device using a small bundled Core ML model (~4.3 MB) plus a
-/// ~0.73 MB tokenizer, across 23 languages.
+/// `Emo` turns a short phrase into ranked emoji suggestions, fully on device,
+/// across 23 languages. A small hashed n-gram stream plus a transformer over a
+/// pruned multilingual token sequence run through the shared inference session
+/// (Core ML on Apple, LiteRT elsewhere). Create one once and reuse it.
 ///
 /// ```swift
-/// let suggestions = try await Emo.suggestions(for: "Pay my bills")
-/// let emoji = try await Emo.suggestions(for: "犬の散歩", limit: 1).first?.emoji  // "🐕"
-/// let toned = try await Emo.suggestions(for: "go for a run", limit: 1, skinTone: .medium).first?.emoji  // "🏃🏽"
+/// let emo = Emo()
+/// let suggestions = try await emo.suggestions(for: "Pay my bills")
+/// // ["💰", "💳", "🧾", ...]
+/// let toned = try await emo.suggestions(for: "go for a run", limit: 1, skinTone: .medium)
+/// // "🏃🏽"
 /// ```
-public enum Emo {
-    /// Returns emoji suggestions for a phrase, sorted from most to least likely.
+public final class Emo: @unchecked Sendable {
+    /// Resolve the model's assets (downloading/adopting as needed), reporting
+    /// progress `0...1`.
+    typealias ResolveAssets = @Sendable (@escaping @Sendable (Double) -> Void) async throws -> ModelAssets
+
+    private let loader: LazyLoader<Model>
+    private let availability: @Sendable () -> Bool
+
+    /// Creates a suggester. Construction does no work and starts no download;
+    /// the model loads on the first ``suggestions(for:limit:skinTone:)`` or
+    /// ``download(progress:)``, off your calling thread.
+    ///
+    /// Emo is small, so with no `directory` (the default) the model **bundled
+    /// into the SDK** is used - ready offline, no download. Passing a
+    /// `directory` opts into adopt-or-download: if it already contains the model
+    /// it is used offline; otherwise the model is downloaded into it and reused.
+    /// (Disable the `BundledModel` package trait to make the default download on
+    /// demand instead.)
+    public convenience init(directory: String? = nil) {
+        self.init(directory: directory, cacheRoot: nil)
+    }
+
+    /// Binding entry point that also supplies the platform base cache root under
+    /// which the managed layout lives (the app cache dir on Android, node
+    /// `~/.cache` on the web). On Apple/Linux FileManager provides it, so the
+    /// public `init(directory:)` passes `nil`.
+    @_spi(EmoBindings)
+    public convenience init(directory: String?, cacheRoot: String?) {
+        self.init(
+            resolve: { try await Emo.defaultAssets(directory: directory, cacheRoot: cacheRoot, progress: $0) },
+            isAvailable: { Emo.defaultIsAvailable(directory: directory, cacheRoot: cacheRoot) }
+        )
+    }
+
+    /// Creates a suggester from explicitly provided assets (used by the
+    /// Android/JNI and custom-deployment paths).
+    @_spi(EmoBindings)
+    public convenience init(assets: ModelAssets) {
+        self.init(resolve: { _ in assets }, isAvailable: { true })
+    }
+
+    init(resolve: @escaping ResolveAssets, isAvailable: @escaping @Sendable () -> Bool) {
+        loader = LazyLoader { progress in try Model(assets: await resolve(progress)) }
+        availability = isAvailable
+    }
+
+    /// Whether the model is available for this suggester with no network:
+    /// cached (for the download source), present (for a directory), or bundled.
+    public func isDownloaded() -> Bool { availability() }
+
+    /// Download and load the model ahead of time, so the first
+    /// ``suggestions(for:limit:skinTone:)`` is instant. Reports download
+    /// progress `0...1`. Concurrent calls, and an implicit load from a
+    /// suggestion, share one download. A no-op once loaded (see
+    /// ``isDownloaded()``).
+    public func download(progress: @Sendable @escaping (Double) -> Void = { _ in }) async throws {
+        try await loader.run(progress: progress)
+    }
+
+    /// Await model readiness. The bindings use this to surface load errors
+    /// eagerly; apps can just call ``suggestions(for:limit:skinTone:)``.
+    @_spi(EmoBindings)
+    public func waitUntilLoaded() async throws {
+        _ = try await loader.value()
+    }
+
+    /// Returns up to `limit` emoji suggestions for `text`, most likely first.
     ///
     /// - Parameters:
     ///   - text: A short task, calendar entry, note, or message draft.
-    ///   - limit: The maximum number of suggestions to return. Pass `1` for only the best emoji.
-    ///   - skinTone: Preferred skin tone for skin-tone-capable emoji. Defaults to ``EmojiSkinTone/default``.
-    /// - Returns: Up to `limit` emoji suggestions. Empty input returns an empty array.
-    public static func suggestions(for text: String, limit: Int = 3, skinTone: EmojiSkinTone = .default) async throws -> [EmoSuggestion] {
-        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+    ///   - limit: The maximum number of suggestions. Pass `1` for only the best emoji.
+    ///   - skinTone: Preferred skin tone for skin-tone-capable emoji.
+    /// - Returns: Up to `limit` suggestions. Empty input returns `[]`.
+    public func suggestions(for text: String, limit: Int = 3, skinTone: EmojiSkinTone = .default) async throws -> [EmoSuggestion] {
+        let trimmed = text.trimmed
         guard !trimmed.isEmpty else { return [] }
-
-        let loaded = try await modelTask.value
-        let cfg = loaded.cfg
-
-        let (buckets, signs, importance) = NGram.encode(
-            trimmed, nBuckets: UInt32(cfg.nBuckets), nHashes: cfg.nHashes,
-            nImportance: UInt32(cfg.nImportance), maxFeatures: maxLen)
-        let featureCount = buckets.count
-
-        var sem = loaded.sem.encode(trimmed)
-        if sem.count > maxLen { sem = Array(sem.prefix(maxLen)) }
-        if sem.isEmpty { sem = [Int32(cfg.semPadIndex)] }
-
-        guard
-            let mlBuckets = try? MLMultiArray(shape: [featureCount as NSNumber, cfg.nHashes as NSNumber], dataType: .int32),
-            let mlSigns = try? MLMultiArray(shape: [featureCount as NSNumber, cfg.nHashes as NSNumber], dataType: .float32),
-            let mlImp = try? MLMultiArray(shape: [featureCount as NSNumber], dataType: .int32),
-            let mlNgramCount = try? MLMultiArray(shape: [1], dataType: .float32),
-            let mlSem = try? MLMultiArray(shape: [sem.count as NSNumber], dataType: .int32),
-            let mlSemCount = try? MLMultiArray(shape: [1], dataType: .float32)
-        else { throw EmoError.predictionFailed }
-
-        let bPtr = mlBuckets.dataPointer.bindMemory(to: Int32.self, capacity: featureCount * cfg.nHashes)
-        let sPtr = mlSigns.dataPointer.bindMemory(to: Float.self, capacity: featureCount * cfg.nHashes)
-        let iPtr = mlImp.dataPointer.bindMemory(to: Int32.self, capacity: featureCount)
-        for f in 0..<featureCount {
-            iPtr[f] = importance[f]
-            for k in 0..<cfg.nHashes {
-                bPtr[f * cfg.nHashes + k] = buckets[f][k]
-                sPtr[f * cfg.nHashes + k] = signs[f][k]
-            }
-        }
-        mlNgramCount[0] = NSNumber(value: Float(featureCount))
-        let semPtr = mlSem.dataPointer.bindMemory(to: Int32.self, capacity: sem.count)
-        for i in sem.indices { semPtr[i] = sem[i] }
-        mlSemCount[0] = NSNumber(value: Float(sem.count))
-
-        guard let provider = try? MLDictionaryFeatureProvider(dictionary: [
-            "ngram_buckets": mlBuckets, "ngram_signs": mlSigns, "ngram_importance": mlImp,
-            "ngram_count": mlNgramCount, "sem_ids": mlSem, "sem_count": mlSemCount,
-        ]) else { throw EmoError.predictionFailed }
-
-        let output: MLFeatureProvider = if #available(macOS 14.0, iOS 17.0, tvOS 17.0, watchOS 10.0, *) {
-            try await loaded.model.prediction(from: provider)
-        } else {
-            try loaded.model.prediction(from: provider)
-        }
-
-        // The transformer model outputs a raw probability vector; map indices to labels.
-        let outValue = output.featureValue(for: "probabilities")
-            ?? output.featureNames.lazy.compactMap { output.featureValue(for: $0) }.first { $0.multiArrayValue != nil }
-        guard let arr = outValue?.multiArrayValue else { throw EmoError.predictionFailed }
-        let labels = cfg.labels
-        var probs: [(String, Double)] = []
-        probs.reserveCapacity(labels.count)
-        for i in 0..<min(labels.count, arr.count) { probs.append((labels[i], arr[i].doubleValue)) }
-        return probs
-            .sorted { $0.1 > $1.1 }
-            .prefix(max(0, limit))
-            .map { EmoSuggestion(emoji: $0.0.applyingSkinTone(skinTone), confidence: $0.1) }
+        let model = try await loader.value()
+        return try await model.suggestions(for: trimmed, limit: limit, skinTone: skinTone)
     }
+}
 
-    private struct Config: Decodable {
-        let nHashes: Int
-        let nBuckets: Int
-        let nImportance: Int
-        let semPadIndex: Int
-        let labels: [String]
-
-        enum CodingKeys: String, CodingKey {
-            case nHashes = "n_hashes", nBuckets = "n_buckets"
-            case nImportance = "n_importance", semPadIndex = "sem_pad_index"
-            case labels
+private extension String {
+    /// Trim ASCII/Unicode whitespace without Foundation (absent on Android).
+    var trimmed: String {
+        let scalars = unicodeScalars
+        var start = scalars.startIndex
+        var end = scalars.endIndex
+        while start < end, scalars[start].properties.isWhitespace { start = scalars.index(after: start) }
+        while end > start {
+            let prev = scalars.index(before: end)
+            if scalars[prev].properties.isWhitespace { end = prev } else { break }
         }
-    }
-
-    private struct Loaded { let model: MLModel; let sem: SemTokenizer; let cfg: Config }
-
-    private static let maxLen = 1024
-
-    private static let modelTask = Task<Loaded, Error> {
-        guard
-            let modelURL = Bundle.module.url(forResource: "Emo", withExtension: "mlmodelc"),
-            let metaURL = Bundle.module.url(forResource: "emo_meta", withExtension: "json"),
-            let tokURL = Bundle.module.url(forResource: "emo_tokenizer", withExtension: "bin")
-        else { throw EmoError.modelNotFound }
-
-        let config = MLModelConfiguration()
-        #if targetEnvironment(simulator)
-        config.computeUnits = .cpuOnly
-        #else
-        config.computeUnits = .all
-        #endif
-
-        let model = try await MLModel.load(contentsOf: modelURL, configuration: config)
-        let cfg = try JSONDecoder().decode(Config.self, from: Data(contentsOf: metaURL))
-        guard let sem = SemTokenizer(data: try Data(contentsOf: tokURL)) else {
-            throw EmoError.modelNotFound
-        }
-        return Loaded(model: model, sem: sem, cfg: cfg)
+        return String(String.UnicodeScalarView(scalars[start..<end]))
     }
 }

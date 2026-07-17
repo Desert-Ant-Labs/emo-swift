@@ -1,30 +1,27 @@
-# macOS
-.DS_Store
-
-# SwiftPM / Xcode build output
 .build/
-build/
-DerivedData/
-
-# Xcode user state
+.swiftpm/
+**/.gradle/
+**/build/
+# Compiled WebAssembly (built by `mise run build-web`)
+*.wasm
+.DS_Store
 *.xcuserstate
 xcuserdata/
-.swiftpm/xcode/
-
-# Formatter config (local only)
-.swiftformat
-
-
-# training venv / caches
-training/.venv/
-training/__pycache__/
-
-# training generated data / model artifacts
-training/data/
-training/runs/
-training/labels.json
-training/*.npz
-training/*.pt
-training/*.onnx
-training/*.onnx.data
-training/*.mlpackage/
+DerivedData/
+Vendor/
+Examples/EmoWasmExample/node_modules/
+Examples/EmoWasmExample/package-lock.json
+packages/emo-node/dist/
+packages/emo-node/native/
+packages/emo-node/node_modules/
+packages/emo-node/LICENSE.md
+packages/emo-kotlin/src/main/jniLibs/
+packages/emo-kotlin/src/main/assets/
+packages/emo-kotlin/natives/
+packages/emo-kotlin/.gradle/
+packages/emo-kotlin/build/
+packages/emo-kotlin/src/main/resources/
+packages/emo-kotlin/emo-tflite-resources/src/main/resources/
+packages/emo-kotlin/emo-tflite-resources/build/
+mise.local.toml
+mise.*.local.toml

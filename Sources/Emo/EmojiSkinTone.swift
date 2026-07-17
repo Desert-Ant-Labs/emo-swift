@@ -1,4 +1,5 @@
-import Foundation
+// Skin-tone post-processing is pure stdlib (Unicode scalar arithmetic), so it
+// builds unchanged on Apple, Android, and wasm with no Foundation.
 
 /// Preferred emoji skin tone variant for skin-tone-capable emoji.
 public enum EmojiSkinTone: Sendable, Equatable {

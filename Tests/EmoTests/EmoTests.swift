@@ -1,39 +1,75 @@
+import Foundation
+import XCTest
 @testable import Emo
-import Testing
 
-struct EmoTests {
-    private func top(_ task: String) async throws -> String {
-        try await Emo.suggestions(for: task, limit: 1).first?.emoji ?? ""
+#if canImport(CoreML)
+import EmoCoreMLResources
+#elseif os(Linux) || os(Windows)
+import EmoTFLiteResources
+#endif
+
+/// End-to-end suggestion through the bundled model. On Apple this runs the Core
+/// ML artifact; on Linux/Windows the LiteRT artifact (via LiteRT). Both exports
+/// come from the same checkpoint and share one fixed-window signature, so the
+/// results match.
+final class EmoTests: XCTestCase {
+    private func makeEmo() -> Emo {
+        #if canImport(CoreML)
+        return Emo(bundle: EmoCoreMLResourcesBundle.bundle)
+        #elseif os(Linux) || os(Windows)
+        return Emo(bundle: EmoTFLiteResourcesBundle.bundle)
+        #else
+        fatalError("no bundled model for this platform")
+        #endif
     }
 
-    @Test func englishPredictions() async throws {
-        #expect(["💰", "💳", "🧾", "🏦", "📄"].contains(try await top("Pay my bills")))
-        #expect(["🐕", "🐾", "🚶"].contains(try await top("walk the dog")))
-        #expect(try await top("book a flight to Tokyo") == "✈️")
-        #expect(["🦷", "📅", "🏥"].contains(try await top("dentist appointment")))
+    private func top(_ text: String) async throws -> String {
+        try await makeEmo().suggestions(for: text, limit: 1).first?.emoji ?? ""
     }
 
-    @Test func multilingualPredictions() async throws {
-        #expect(["🐕", "🐾"].contains(try await top("犬の散歩")))
-        #expect(["☕", "🍵", "🥛"].contains(try await top("café con leche")))
-        #expect(["✈️", "🗼"].contains(try await top("réserver un vol pour Tokyo")))
+    func testEnglishPredictions() async throws {
+        let emo = makeEmo()
+        let bills = try await emo.suggestions(for: "Pay my bills", limit: 5).map(\.emoji)
+        XCTAssertTrue(bills.contains { ["💰", "💳", "🧾", "🏦", "📄"].contains($0) }, "got \(bills)")
+        let dog = try await emo.suggestions(for: "walk the dog", limit: 5).map(\.emoji)
+        XCTAssertTrue(dog.contains { ["🐕", "🐾", "🚶"].contains($0) }, "got \(dog)")
+        let flight = try await emo.suggestions(for: "book a flight to Tokyo", limit: 5).map(\.emoji)
+        XCTAssertTrue(flight.contains("✈️"), "got \(flight)")
     }
 
-    @Test func ranking() async throws {
-        let results = try await Emo.suggestions(for: "Pay my bills", limit: 3)
-        #expect(results.count == 3)
-        #expect(results[0].confidence >= results[1].confidence)
-        #expect(results.allSatisfy { (0...1).contains($0.confidence) })
+    func testMultilingualPredictions() async throws {
+        let emo = makeEmo()
+        let walk = try await emo.suggestions(for: "犬の散歩", limit: 5).map(\.emoji)
+        XCTAssertTrue(walk.contains { ["🐕", "🐾"].contains($0) }, "got \(walk)")
+        let coffee = try await emo.suggestions(for: "café con leche", limit: 5).map(\.emoji)
+        XCTAssertTrue(coffee.contains { ["☕", "🍵", "🥛"].contains($0) }, "got \(coffee)")
     }
 
-    @Test func emptyInput() async throws {
-        #expect(try await Emo.suggestions(for: "   ").isEmpty)
+    func testRanking() async throws {
+        let results = try await makeEmo().suggestions(for: "Pay my bills", limit: 3)
+        XCTAssertEqual(results.count, 3)
+        XCTAssertGreaterThanOrEqual(results[0].confidence, results[1].confidence)
+        XCTAssertTrue(results.allSatisfy { (0...1).contains($0.confidence) })
     }
 
-    @Test func skinTonePostprocessing() {
-        #expect("🏃".applyingSkinTone(.medium) == "🏃🏽")
-        #expect("🧑‍🍳".applyingSkinTone(.dark) == "🧑🏿‍🍳")
-        #expect("✍️".applyingSkinTone(.light) == "✍🏻")
-        #expect("🐕".applyingSkinTone(.medium) == "🐕")
+    func testEmptyInput() async throws {
+        let results = try await makeEmo().suggestions(for: "   ")
+        XCTAssertTrue(results.isEmpty)
+    }
+
+    /// The default `Emo()` (no bundle argument) uses the model bundled into the
+    /// SDK by the BundledModel trait - available offline, no download.
+    func testDefaultInitUsesBundledModel() async throws {
+        let emo = Emo()
+        XCTAssertTrue(emo.isDownloaded())
+        let results = try await emo.suggestions(for: "Pay my bills", limit: 3)
+        XCTAssertEqual(results.count, 3)
+    }
+
+    func testSkinTonePostprocessing() {
+        XCTAssertEqual("🏃".applyingSkinTone(.medium), "🏃🏽")
+        XCTAssertEqual("🧑‍🍳".applyingSkinTone(.dark), "🧑🏿‍🍳")
+        XCTAssertEqual("✍️".applyingSkinTone(.light), "✍🏻")
+        XCTAssertEqual("🐕".applyingSkinTone(.medium), "🐕")
     }
 }

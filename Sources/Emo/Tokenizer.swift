@@ -1,4 +1,11 @@
-import Foundation
+// The two tokenizers that turn a phrase into the model's inputs, written in pure
+// Swift so they run identically on Apple, Android, and wasm:
+//   * `NGram`        script-aware n-grams + FNV hashing -> ngram_* tensors
+//   * `SemTokenizer` pruned-unigram (Viterbi) tokenizer -> sem_ids tensor
+// The only platform abstraction is Unicode NFKC, from desert-ant-core's
+// `TextNormalization` (Foundation on Apple, ICU on Android, `String.normalize`
+// on the web); everything else is Swift stdlib scalar arithmetic.
+import TextNormalization
 
 @inline(__always)
 private func fnv64(_ s: String, seed: UInt64) -> UInt64 {
@@ -94,7 +101,7 @@ enum NGram {
     }
 
     private static func normalize(_ text: String) -> String {
-        let n = text.precomposedStringWithCompatibilityMapping.lowercased()
+        let n = text.nfkc.lowercased()
         return n.split(whereSeparator: { $0.isWhitespace }).joined(separator: " ")
     }
 
@@ -162,8 +169,7 @@ enum NGram {
 }
 
 final class SemTokenizer {
-    init?(data: Data) {
-        let bytes = [UInt8](data)
+    init?(bytes: [UInt8]) {
         guard bytes.count >= 14, bytes[0] == 0x45, bytes[1] == 0x4D, bytes[2] == 0x54, bytes[3] == 0x4B else { return nil }
         var off = 6
         func u32() -> UInt32 {
@@ -198,8 +204,9 @@ final class SemTokenizer {
     }
 
     func encode(_ text: String) -> [Int32] {
-        let normalized = "\u{2581}" + text.lowercased().precomposedStringWithCompatibilityMapping
-            .replacingOccurrences(of: " ", with: "\u{2581}")
+        let ms: Character = "\u{2581}"
+        let lowered = text.lowercased().nfkc
+        let normalized = String([ms] + lowered.map { $0 == " " ? ms : $0 })
         let s = Array(normalized.unicodeScalars)
         let n = s.count
         if n == 0 { return [] }
