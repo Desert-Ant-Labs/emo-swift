@@ -1,35 +1,39 @@
 # Emo
 
-On-device multilingual emoji suggestion for Swift, Android, and JavaScript. Give
-Emo a short task, calendar entry, note, or message and it returns ranked emoji.
-Everything runs locally, so the text never leaves the device or browser.
+On-device multilingual emoji suggestion for Swift, Android, and JavaScript. Give Emo a short task, calendar entry, note, or message and it returns ranked emoji, across 23 languages. Everything runs locally, so the text never leaves the device or browser.
 
-A hashed script-aware n-gram stream and a small transformer over a pruned
-multilingual token sequence run through one shared pipeline, written once in
-Swift and compiled natively for Apple, to a `.so` for Android, and to
-WebAssembly for the web.
+A hashed script-aware n-gram stream and a small transformer over a pruned multilingual token sequence run through one shared pipeline, so it reads meaning rather than matching keywords, and the results are the same on every platform.
 
 ```text
 "Pay my bills"   ->   💰  💳  🧾
 "犬の散歩"        ->   🐕  🐾
-"go for a run"   ->   🏃 (with a skin tone: 🏃🏽)
+"go for a run"   ->   🏃   (with a skin tone: 🏃🏽)
 ```
 
 - [Features](#features)
 - [Swift](#swift)
+  - [Install](#install)
+  - [Usage](#usage)
+  - [Example](#example)
 - [Android](#android)
+  - [Install](#install-1)
+  - [Usage](#usage-1)
+  - [Example](#example-1)
 - [JavaScript and TypeScript](#javascript-and-typescript)
+  - [Install](#install-2)
+  - [Usage](#usage-2)
+  - [Example](#example-2)
+- [Suggestions](#suggestions)
 - [Model and caching](#model-and-caching)
 - [License](#license)
 
 ## Features
 
 - Runs fully on device or in the local runtime. The text never leaves the machine.
-- Suggests from a curated vocabulary of ~800 everyday emoji (task, message, and concrete nouns).
-- Supports 23 languages, including CJK, Arabic, Thai, and Hindi.
-- One and the same pipeline on every platform, so results match: Core ML on Apple, LiteRT on Android and Linux, LiteRT.js in the browser.
-- Small model **bundled by default** on every platform, so normal installs work fully offline; on-demand download/adopt remains available (see the opt-outs below). Inference is typically a few milliseconds.
-- Optional skin tone for skin-tone-capable emoji.
+- Suggests from a curated vocabulary of ~800 everyday emoji, with optional skin tones.
+- Multilingual: 23 languages, including CJK, Arabic, Thai, and Hindi.
+- One and the same pipeline on every platform, so results match: Core ML on Apple, LiteRT on Android and Linux, LiteRT.js in the browser, and a native Core ML / LiteRT core in Node.
+- Small model bundled by default (about 5 MB on Apple, ~11 MB LiteRT), with explicit-directory download/adopt still available; a suggestion is typically well under 2 ms.
 
 ## Swift
 
@@ -43,56 +47,97 @@ Add Emo with Swift Package Manager:
 .package(url: "https://github.com/Desert-Ant-Labs/emo.git", from: "0.7.0")
 ```
 
-Then add the `Emo` product to your app target. Emo is small, so the Core ML
-model is **bundled by default** (via the `BundledModel` package trait) and
-`EmoCoreMLResources` remains available for explicit bundle construction. To use
-on-demand download or an explicit model directory instead, disable the trait:
+Then add the `Emo` product to your app target.
+
+The Core ML model is bundled by default because Emo is small. `EmoCoreMLResources` remains available for explicit bundle construction and tests. SwiftPM consumers who prefer on-demand download or an explicit model directory can disable the default `BundledModel` trait:
 
 ```swift
 .package(url: "https://github.com/Desert-Ant-Labs/emo.git", from: "0.7.0", traits: [])
 ```
 
-With the trait disabled, `Emo()` downloads on demand and `Emo(directory:)` loads
-from or downloads into your chosen directory.
+With the trait disabled, `Emo()` downloads on demand and `Emo(directory:)` loads from or downloads into your chosen directory.
 
 ### Usage
 
-Create one `Emo` and reuse it. Construction is cheap and non-blocking; the model
-loads on first use, or earlier if you call `download`.
+Create one `Emo` and reuse it. Construction is cheap and non-blocking. The model loads on first use, or earlier if you call `download`.
 
 ```swift
 import Emo
 
-let emo = Emo()                             // bundled model by default, ready offline
+let emo = Emo()
 let suggestions = try await emo.suggestions(for: "Pay my bills")
 // [EmoSuggestion(emoji: "💰", confidence: ...), ...]
 
-let best = try await emo.suggestions(for: "犬の散歩", limit: 1).first?.emoji  // "🐕"
+let best = try await emo.suggestions(for: "犬の散歩", limit: 1).first?.emoji            // "🐕"
 let toned = try await emo.suggestions(for: "go for a run", limit: 1, skinTone: .medium).first?.emoji  // "🏃🏽"
-
-let fromDir = Emo(directory: myModelDir)    // explicit directory (adopt or download)
-let fromBundle = Emo(bundle: EmoCoreMLResourcesBundle.bundle)  // explicit bundled resources
 ```
+
+Choose where the model comes from:
+
+```swift
+let emo = Emo()                       // bundled model by default
+let emo = Emo(directory: myModelDir)  // explicit model directory
+let emo = Emo(bundle: myBundle)       // bundled model resources
+```
+
+Download ahead of time, for example from an onboarding screen:
+
+```swift
+let emo = Emo()
+if !emo.isDownloaded() {
+    try await emo.download { fraction in
+        print("\(Int(fraction * 100))%")
+    }
+}
+```
+
+Bundle the model in an Apple app:
+
+```swift
+import Emo
+import EmoCoreMLResources
+
+let emo = Emo(bundle: EmoCoreMLResourcesBundle.bundle)
+```
+
+### Example
+
+[SwiftUI example app](Examples/EmoExample)
 
 ## Android
 
 ### Install
 
-Requirements: Android API 31+ (Kotlin, coroutines). From Maven Central:
+Requirements: Android API 31+. The AAR contains prebuilt arm64-v8a and x86_64 native libraries.
+
+Emo is published to Maven Central.
 
 ```kotlin
-implementation("ai.desertant:emo:0.7.0")
-```
+// settings.gradle.kts
+dependencyResolutionManagement {
+    repositories {
+        google()
+        mavenCentral()
+    }
+}
 
-`ai.desertant:emo` bundles the small LiteRT model by default (a transitive
-`emo-tflite-resources` dependency), so normal installs work offline. To disable
-bundling and download on demand instead, exclude that transitive artifact:
-
-```kotlin
-implementation("ai.desertant:emo:0.7.0") {
-    exclude(group = "ai.desertant", module = "emo-tflite-resources")
+// build.gradle.kts
+dependencies {
+    implementation("ai.desertant:emo:0.7.0")
 }
 ```
+
+`ai.desertant:emo` bundles the small LiteRT model by default, so normal installs work offline. To disable bundling, exclude the transitive resources artifact:
+
+```kotlin
+dependencies {
+    implementation("ai.desertant:emo:0.7.0") {
+        exclude(group = "ai.desertant", module = "emo-tflite-resources")
+    }
+}
+```
+
+With that exclusion, `Emo(context)` downloads on demand and caches the model. `Emo(context, directory = modelDir)` loads from or downloads into your chosen directory.
 
 ### Usage
 
@@ -100,71 +145,115 @@ implementation("ai.desertant:emo:0.7.0") {
 import ai.desertant.emo.Emo
 import ai.desertant.emo.EmojiSkinTone
 
-val emo = Emo(context)                                  // bundled model by default, offline
+val emo = Emo(context)                                  // bundled model by default
 val suggestions = emo.suggestions("Pay my bills")       // List<EmoSuggestion>
+
 val toned = emo.suggestions("go for a run", limit = 1, skinTone = EmojiSkinTone.MEDIUM)
 emo.close()
-
-val fromDir = Emo(context, directory = myModelDir)      // explicit directory (adopt or download)
-val bundled = Emo.bundled()                             // explicit bundled constructor
 ```
+
+`suggestions` and `download` are `suspend` functions. Use `use` to close the native handle automatically:
+
+```kotlin
+Emo(context).use { emo ->
+    val suggestions = emo.suggestions("Pay my bills")
+}
+```
+
+Download before first use:
+
+```kotlin
+val emo = Emo(context)
+if (!emo.isDownloaded()) {
+    emo.download()
+}
+```
+
+Use an explicit model directory or bundled resources:
+
+```kotlin
+val cached = Emo(context)                         // managed cache
+val explicit = Emo(context, directory = modelDir) // explicit model directory
+val offline = Emo.bundled()                       // explicit bundled constructor
+```
+
+### Example
+
+[Android example app](Examples/EmoAndroidExample)
 
 ## JavaScript and TypeScript
 
-One package, both environments: the same `import { Emo }` runs in the **browser**
-(WebAssembly + LiteRT.js) and **server-side in Node** (a prebuilt native core),
-selected automatically by conditional exports.
-
 ### Install
 
-In Node (server-side), just the SDK - inference is native, no extra runtime:
+The same import runs in the browser (WebAssembly + LiteRT.js) and server-side in Node (a prebuilt native core), selected automatically by conditional exports. Node needs no setup; browser builds add the LiteRT.js runtime.
 
 ```bash
-npm install @desert-ant-labs/emo
+# Browser builds:
+npm i @desert-ant-labs/emo @litertjs/core
+
+# Node only:
+npm i @desert-ant-labs/emo
 ```
 
-In the browser, also add the LiteRT.js runtime (an optional peer dependency):
-
-```bash
-npm install @desert-ant-labs/emo @litertjs/core
-```
-
-Emo is small, so the npm package ships the model files in the tarball and
-`Emo.load()` uses them by default (offline in both Node and the browser). Pass a
-`directory` option to opt into adopt-or-download from the Hugging Face Hub.
+Server-side native builds ship for linux-x64, linux-arm64 (LiteRT), and darwin-arm64 (Core ML); other platforms fall back to a clear error, so use the Swift package or a browser there.
 
 ### Usage
 
-```js
+```ts
 import { Emo } from "@desert-ant-labs/emo";
 
-const emo = await Emo.load();                            // bundled model by default, offline
-const suggestions = await emo.suggestions("Pay my bills"); // [{ emoji, confidence }, ...]
+const emo = await Emo.load();                               // bundled model by default
+const suggestions = await emo.suggestions("Pay my bills");  // [{ emoji, confidence }, ...]
+
 const toned = await emo.suggestions("go for a run", { limit: 1, skinTone: "medium" });
-emo.dispose();                                           // frees the native handle (Node; no-op in browser)
+emo.dispose();                                              // Node: free the native handle (no-op in the browser)
 ```
 
-The Node build ships prebuilt natives for linux-x64, linux-arm64, and
-darwin-arm64. See `Examples/EmoWasmExample` for a Node example and a
-headless-Chromium browser harness.
+Control loading:
+
+```js
+const emo = await Emo.load({
+  directory: "/var/cache/emo",          // Node only, optional
+  onProgress: (fraction) => console.log(fraction),
+});
+```
+
+Bring your own LiteRT.js module (browser), useful for bundlers and React Native:
+
+```js
+import * as litert from "@litertjs/core";
+import { Emo } from "@desert-ant-labs/emo";
+
+const emo = await Emo.load({ litert, litertWasmDir: "/path/to/@litertjs/core/wasm/" });
+```
+
+### Example
+
+[JavaScript examples](Examples/EmoWasmExample)
+
+## Suggestions
+
+All platforms return the same suggestion shape: an emoji and its confidence, ranked most likely first.
+
+- `emoji` - the suggested emoji, with the requested skin tone already applied.
+- `confidence` - the model's normalized score in `0...1`.
+
+The field names are identical across Swift (`EmoSuggestion`), Kotlin (`EmoSuggestion`), and TypeScript. `limit` caps how many suggestions come back. `skinTone` (`default`, `light`, `mediumLight`, `medium`, `mediumDark`, `dark`) is applied to skin-tone-capable emoji; empty input returns no suggestions.
 
 ## Model and caching
 
-All platforms run the same weights: `emo.mlmodelc` (Core ML) on Apple and
-`emo.tflite` (LiteRT) everywhere else, plus the shared `emo_meta.json` and
-`emo_tokenizer.bin` sidecars. The two tokenizers (script-aware n-grams and a
-pruned-unigram semantic tokenizer) run in the shared Swift core, so the exact
-same fixed-window tensors feed every backend.
+The model artifacts are published at [`desert-ant-labs/emo`](https://huggingface.co/desert-ant-labs/emo) on Hugging Face. Each SDK pins the model revision to its own package version, and downloads are SHA-256 verified.
 
-Emo is small, so every platform **bundles the model by default** and works
-offline out of the box: the SwiftPM `BundledModel` trait, a transitive
-`emo-tflite-resources` dependency on Android, and the model files shipped in the
-npm tarball. Each platform also has an opt-out (a disabled trait, a Gradle
-exclusion, or a `directory` option) that switches to on-demand download from the
-Hugging Face Hub at [`desert-ant-labs/emo`](https://huggingface.co/desert-ant-labs/emo)
-(SHA-256 verified and cached), pinned to a revision by the SDK.
+Default behavior:
+
+- Swift: bundles the Core ML model by default, with explicit-directory download/adopt still available.
+- Android: bundles the LiteRT model by default through the normal `ai.desertant:emo` dependency.
+- JavaScript: bundles the model in the npm package by default; the Node native runs Core ML on macOS and LiteRT on Linux, and the browser runs LiteRT.js.
+
+Passing an explicit `directory` makes that directory the model home. Existing valid files are adopted for offline use; otherwise Emo downloads into that directory and reuses it later.
 
 ## License
 
-Source-available under the Desert Ant Labs Source-Available License 1.0. See
-[LICENSE.md](LICENSE.md) and [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+[Desert Ant Labs Source-Available License](https://license.desertant.ai/1.0). Free for most apps; a commercial license is required at scale. Full terms are at the link. Licensing: <licensing@desertant.ai>.
+
+Third-party data and model attributions are in [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md).
