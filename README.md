@@ -44,7 +44,7 @@ Requirements: iOS 16+, macOS 13+, tvOS 16+, watchOS 9+, visionOS 1+, and Swift 5
 Add Emo with Swift Package Manager:
 
 ```swift
-.package(url: "https://github.com/Desert-Ant-Labs/emo.git", from: "0.8.0")
+.package(url: "https://github.com/Desert-Ant-Labs/emo.git", from: "0.9.0")
 ```
 
 Then add the `Emo` product to your app target.
@@ -52,7 +52,7 @@ Then add the `Emo` product to your app target.
 The Core ML model is bundled by default because Emo is small. `EmoCoreMLResources` remains available for explicit bundle construction and tests. SwiftPM consumers who prefer on-demand download or an explicit model directory can disable the default `BundledModel` trait:
 
 ```swift
-.package(url: "https://github.com/Desert-Ant-Labs/emo.git", from: "0.8.0", traits: [])
+.package(url: "https://github.com/Desert-Ant-Labs/emo.git", from: "0.9.0", traits: [])
 ```
 
 With the trait disabled, `Emo()` downloads on demand and `Emo(directory:)` loads from or downloads into your chosen directory.
@@ -202,18 +202,23 @@ Server-side native builds ship for linux-x64, linux-arm64 (LiteRT), and darwin-a
 ```ts
 import { Emo } from "@desert-ant-labs/emo";
 
-const emo = await Emo.load();                               // bundled model by default
+const emo = await Emo.load();                               // downloads + caches on first use
 const suggestions = await emo.suggestions("Pay my bills");  // [{ emoji, confidence }, ...]
 
 const toned = await emo.suggestions("go for a run", { limit: 1, skinTone: "medium" });
 emo.dispose();                                              // Node: free the native handle (no-op in the browser)
 ```
 
-Control loading:
+Unlike the Swift and Android packages, the JavaScript package does not bundle the
+model: `Emo.load()` downloads it from the Hugging Face Hub at the SDK's pinned tag
+on first use and caches it (the OS cache dir in Node, the fetch cache in the
+browser). To self-host or run offline, pass `directory` (Node) or `modelBaseUrl`
+(browser):
 
 ```js
 const emo = await Emo.load({
-  directory: "/var/cache/emo",          // Node only, optional
+  directory: "/var/cache/emo",          // Node: adopt/download files here
+  modelBaseUrl: "/assets/emo/",         // Browser: serve the files yourself
   onProgress: (fraction) => console.log(fraction),
 });
 ```

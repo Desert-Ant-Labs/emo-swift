@@ -23,14 +23,27 @@ export interface SuggestOptions {
   skinTone?: EmojiSkinTone;
 }
 
-/** How the model is loaded. The repo and revision are pinned to the SDK. */
+/**
+ * How the model is loaded. By default the model is downloaded from the Hugging
+ * Face Hub at the pinned revision and cached (filesystem on Node, Cache API /
+ * IndexedDB in the browser). The repo and revision are pinned to the SDK. Use
+ * `directory` (Node) or `modelBaseUrl` (browser) to self-host / run offline.
+ */
 export interface LoadOptions {
   /**
-   * An explicit directory that is this model's home (node): if it already holds
-   * the files they are used offline, otherwise the model is downloaded into it.
-   * Omit to use the managed cache (`~/.cache/desert-ant-models/...`).
+   * Adopt self-hosted model files from an explicit directory (Node) instead of
+   * downloading from the Hugging Face Hub. If the folder already holds the files
+   * they are used offline; otherwise the model is downloaded into it. Omit to
+   * download into the managed cache (`~/.cache/desert-ant-models/...`).
    */
   directory?: string;
+  /**
+   * Adopt self-hosted model files from a base URL (browser) instead of
+   * downloading from the Hugging Face Hub, e.g. `"/assets/emo/"`. Files are
+   * fetched from `${modelBaseUrl}/<file>`; use this for offline / no-runtime-CDN
+   * setups. Omit to download from the Hub and cache in Cache API / IndexedDB.
+   */
+  modelBaseUrl?: string;
   /** Download progress in `[0, 1]`, called during {@link Emo.load}. */
   onProgress?: (fraction: number) => void;
   /** Base directory for the managed cache (Node, server-side). Defaults to
@@ -57,7 +70,11 @@ export interface LoadOptions {
  * ```
  */
 export declare class Emo {
-  /** Load the model (Hugging Face Hub, cached, or a `directory`) and return a ready suggester. */
+  /**
+   * Load the model and return a ready suggester. Downloads from the Hugging Face
+   * Hub at the pinned revision and caches by default; pass `directory` (Node) or
+   * `modelBaseUrl` (browser) to adopt self-hosted files instead.
+   */
   static load(options?: LoadOptions): Promise<Emo>;
   /**
    * Suggest emojis for `text`, most likely first. Returns up to `limit`

@@ -45,7 +45,6 @@ function loadLib() {
   const core = koffi.load(path.join(dir, CORE[process.platform] || CORE.linux));
   lib = {
     create: core.func("void* emo_create(const char*, const char*)"),
-    createBundledPath: core.func("void* emo_create_bundled_path(const char*, uint8_t*, int, const char*)"),
     isDownloaded: core.func("int emo_is_downloaded(void*)"),
     download: core.func("int emo_download(void*)"),
     run: core.func("void* emo_run(void*, const char*, int, int)"),
@@ -90,7 +89,7 @@ function decodeSuggestions(ptr) {
  * and reuse it, mirroring the browser SDK and the iOS/Swift SDK.
  *
  * ```js
- * const emo = await Emo.load();                        // downloads the model on demand, cached
+ * const emo = await Emo.load();                        // downloads the model on first use, cached
  * const suggestions = await emo.suggestions("Pay my bills");  // [{ emoji, confidence }, ...]
  * emo.dispose();                                       // free the native handle when done
  * ```
@@ -100,40 +99,34 @@ export class Emo {
   constructor(handle) { this.#handle = handle; }
 
   /**
-   * Load the model and return a ready suggester. Download, SHA-256 verification,
-   * and caching are handled by the native core; the repo and revision are
-   * pinned to the SDK.
+   * Load the model and return a ready suggester. By default the model is
+   * downloaded from the Hugging Face Hub at the pinned revision, SHA-256
+   * verified, and cached under the OS cache dir by the native core; the repo
+   * and revision are pinned to the SDK. Pass a `directory` to adopt self-hosted
+   * files (offline) instead of downloading.
+   *
+   * The server-side native runs LiteRT on Linux (from the `.tflite`) and Core ML
+   * on macOS (from the compiled `.mlmodelc` directory); the core downloads only
+   * this host's artifact and loads it by path - one primitive, both runtimes.
    */
   static async load(options = {}) {
     const l = loadLib();
     const onProgress = typeof options.onProgress === "function" ? options.onProgress : undefined;
-    let handle;
-    if (options.directory == null) {
-      // Emo is small, so the npm package ships the model and loads it by default.
-      // The server-side native runs LiteRT on Linux (from the .tflite) and Core
-      // ML on macOS (from the compiled .mlmodelc directory); pass this host's
-      // artifact by path - one primitive, both runtimes, no network or cache.
-      const modelDir = path.join(HERE, "model");
-      const meta = fs.readFileSync(path.join(modelDir, "emo_meta.json"), "utf8");
-      const tokenizer = new Uint8Array(fs.readFileSync(path.join(modelDir, "emo_tokenizer.bin")));
-      const artifact = process.platform === "darwin" ? "emo.mlmodelc" : "emo.tflite";
-      handle = l.createBundledPath(meta, tokenizer, tokenizer.byteLength, path.join(modelDir, artifact));
-      onProgress?.(1);
-    } else {
-      // An explicit directory opts into adopt-or-download behavior.
-      const cacheRoot = options.cacheRoot ?? path.join(os.homedir(), ".cache");
-      handle = l.create(cacheRoot, options.directory);
-    }
+    // `directory == null` downloads this platform's files from HF at the pinned
+    // tag into the managed cache; an explicit `directory` adopts a folder the
+    // consumer self-hosts (offline). Same primitive either way.
+    const cacheRoot = options.cacheRoot ?? path.join(os.homedir(), ".cache");
+    const handle = l.create(cacheRoot, options.directory ?? null);
     if (!handle) throw new Error("@desert-ant-labs/emo: failed to create suggester");
     const emo = new Emo(handle);
-    // With an explicit directory, ready the model now (download if needed) so
-    // the first suggestion is instant and load() surfaces any download error.
-    if (options.directory != null && l.isDownloaded(handle) === 0) {
+    // Ready the model now (download if needed) so the first suggestion is instant
+    // and load() surfaces any download error.
+    if (l.isDownloaded(handle) === 0) {
       onProgress?.(0);
       const rc = await callAsync(l.download, handle);
       if (rc !== 0) { emo.dispose(); throw new Error("@desert-ant-labs/emo: model download failed"); }
-      onProgress?.(1);
     }
+    onProgress?.(1);
     return emo;
   }
 

@@ -47,12 +47,21 @@ async function loadLiteRtModule(options) {
   if (options.litert) return options.litert;
   try {
     return await import("@litertjs/core");
-  } catch (e) {
+  } catch (cause) {
+    // Only surface the install hint when @litertjs/core is genuinely absent;
+    // rethrow anything else (a real error from inside LiteRT.js) unchanged.
+    const missingLiteRt =
+      cause?.code === "ERR_MODULE_NOT_FOUND" ||
+      cause?.code === "MODULE_NOT_FOUND" ||
+      String(cause?.message ?? "").includes("@litertjs/core");
+    if (!missingLiteRt) throw cause;
     throw new Error(
-      "@desert-ant-labs/emo: the browser build needs LiteRT.js. Install it as a peer " +
-        "dependency: `npm i @desert-ant-labs/emo @litertjs/core`. " +
+      "@desert-ant-labs/emo browser runtime requires @litertjs/core. " +
+        "Install it with: npm i @desert-ant-labs/emo @litertjs/core. " +
+        "If you already bundle LiteRT.js yourself, pass it to Emo.load({ litert }). " +
         "(In Node, import the package normally to use the native server-side build instead.)",
-      { cause: e });
+      { cause },
+    );
   }
 }
 
@@ -88,16 +97,18 @@ async function ensureLiteRt(options, lrt) {
  * it, mirroring the iOS/Swift SDK.
  *
  * ```js
- * const emo = await Emo.load();                 // downloads the model on demand, cached
+ * const emo = await Emo.load();                 // downloads the model on first use, cached
  * const suggestions = await emo.suggestions("Pay my bills");  // [{ emoji, confidence }, ...]
  * ```
  */
 export class Emo {
   /**
-   * Load the model and return a ready suggester. Download, SHA-256
-   * verification, and caching are handled by the runtime; this host owns the
-   * LiteRT.js session behind the generic tensor contract (createSession + run).
-   * The repo and revision are pinned to the SDK.
+   * Load the model and return a ready suggester. By default the model is
+   * downloaded from the Hugging Face Hub at the pinned revision, verified, and
+   * cached by the runtime (Cache API / IndexedDB in the browser); this host owns
+   * the LiteRT.js session behind the generic tensor contract (createSession +
+   * run). Pass a `modelBaseUrl` to fetch self-hosted files from your own origin
+   * (offline / no runtime CDN) instead. The repo and revision are pinned to the SDK.
    */
   static async load(options = {}) {
     const resolved = options;
@@ -160,23 +171,28 @@ export class Emo {
     };
 
     const onProgress = typeof resolved.onProgress === "function" ? resolved.onProgress : undefined;
-    if (resolved.directory == null) {
-      // Emo is small, so the npm package includes the LiteRT model by default.
-      // Browser bundlers understand new URL(..., import.meta.url) as a package
-      // asset, and direct node_modules serving works too.
-      const { metaJSON, tokenizerBytes, modelBytes } = await loadPackagedModel();
-      await core.loadBundled(metaJSON, tokenizerBytes, modelBytes);
+    if (resolved.modelBaseUrl != null) {
+      // Self-hosted files (offline / no runtime CDN): fetch the model + sidecars
+      // from the given base URL, compile the model here, and hand the metadata +
+      // tokenizer to the wasm core, no Hub download. This is the browser opt-out,
+      // e.g. an app that serves the model from its own origin.
+      const { metaJSON, tokenizerBytes, modelBytes } = await fetchModelFrom(resolved.modelBaseUrl);
+      model = await loadAndCompile(modelBytes, { accelerator });
+      await core.loadBundled(metaJSON, tokenizerBytes);
       onProgress?.(1);
     } else {
-      // An explicit directory opts into adopt-or-download behavior. Base for the
-      // managed nested cache (node): ~/.cache; empty (in-memory) in the browser.
+      // Default: the runtime downloads this platform's files from the HF Hub at
+      // the pinned tag (SHA-256 verified), fetched + cached by the JS host, and
+      // wires the session through createSession above. `directory` (node) adopts
+      // a self-hosted folder. Base for the managed nested cache (node): ~/.cache;
+      // empty (in-memory) in the browser.
       let cacheRoot = "";
       if (IS_NODE) {
         const os = await import("node:os");
         const path = await import("node:path");
         cacheRoot = path.join(os.homedir(), ".cache");
       }
-      await core.load(cacheRoot, resolved.directory, onProgress);
+      await core.load(cacheRoot, resolved.directory ?? "", onProgress);
     }
     return new Emo();
   }
@@ -192,25 +208,18 @@ export class Emo {
   }
 }
 
-// Read the model files the npm package ships (packages/emo-node/model): node
-// reads them off disk; browser bundlers resolve new URL(..., import.meta.url)
-// to the packaged assets and fetch them.
-async function loadPackagedModel() {
-  if (IS_NODE) {
-    const fs = await import("node:fs");
-    const path = await import("node:path");
-    const { fileURLToPath } = await import("node:url");
-    const here = path.dirname(fileURLToPath(import.meta.url));
-    return {
-      metaJSON: fs.readFileSync(path.join(here, "model", "emo_meta.json"), "utf8"),
-      tokenizerBytes: new Uint8Array(fs.readFileSync(path.join(here, "model", "emo_tokenizer.bin"))),
-      modelBytes: new Uint8Array(fs.readFileSync(path.join(here, "model", "emo.tflite"))),
-    };
-  }
-  const [meta, tok, model] = await Promise.all([
-    fetch(new URL("./model/emo_meta.json", import.meta.url)).then((r) => r.text()),
-    fetch(new URL("./model/emo_tokenizer.bin", import.meta.url)).then((r) => r.arrayBuffer()),
-    fetch(new URL("./model/emo.tflite", import.meta.url)).then((r) => r.arrayBuffer()),
+// Fetch self-hosted model files from a base URL (the `modelBaseUrl` opt-out).
+// Accepts absolute URLs and root-relative paths (e.g. "/assets/emo/").
+async function fetchModelFrom(baseUrl) {
+  const base = baseUrl.endsWith("/") ? baseUrl : `${baseUrl}/`;
+  const [meta, tokenizer, model] = await Promise.all([
+    fetch(`${base}emo_meta.json`).then((r) => r.text()),
+    fetch(`${base}emo_tokenizer.bin`).then((r) => r.arrayBuffer()),
+    fetch(`${base}emo.tflite`).then((r) => r.arrayBuffer()),
   ]);
-  return { metaJSON: meta, tokenizerBytes: new Uint8Array(tok), modelBytes: new Uint8Array(model) };
+  return {
+    metaJSON: meta,
+    tokenizerBytes: new Uint8Array(tokenizer),
+    modelBytes: new Uint8Array(model),
+  };
 }

@@ -10,9 +10,9 @@ import JavaScriptKit
 // start, the module exposes:
 //
 //     globalThis.__EmoExports = {
-//       load(cacheRoot, directory?, onProgress?)          -> Promise<boolean>,
-//       loadBundled(metaJSON, tokenizerBytes, modelBytes) -> Promise<boolean>,
-//       suggest(text, limit?, skinTone?)                  -> Promise<[{emoji, confidence}]>,
+//       load(cacheRoot, directory?, onProgress?)  -> Promise<boolean>,
+//       loadBundled(metaJSON, tokenizerBytes)     -> Promise<boolean>,
+//       suggest(text, limit?, skinTone?)          -> Promise<[{emoji, confidence}]>,
 //     }
 //
 // `skinTone` is a number: 0 default, 1 light, 2 mediumLight, 3 medium,
@@ -89,34 +89,23 @@ let loadFn = JSClosure { args in
     }.jsValue
 }
 
-// loadBundled(metaJSON, tokenizerBytes, modelBytes): load the model the npm
-// package ships (Emo is small, so it bundles by default). The JS host's
-// createSession takes the model bytes; the sidecars come straight from the
-// package, so there is no download.
-private func decodeBytes(_ value: JSValue?) -> [UInt8]? {
-    guard let array = value?.object, let n = array.length.number else { return nil }
-    var bytes: [UInt8] = []
-    bytes.reserveCapacity(Int(n))
-    for i in 0..<Int(n) { bytes.append(UInt8(clamping: Int(array[i].number ?? 0))) }
-    return bytes
+// loadBundled(metaJSON, tokenizerBytes): wire self-hosted model files (the JS
+// host's `modelBaseUrl` opt-out). The host has already compiled the model into
+// its LiteRT.js session (createSession/loadAndCompile), so only the metadata
+// and tokenizer sidecars cross into wasm here; the multi-MB model bytes never
+// do (they stay on the JS side).
+private func typedArrayBytes(_ value: JSValue?) -> [UInt8]? {
+    guard let value, let array = JSTypedArray<UInt8>(from: value) else { return nil }
+    return array.withUnsafeBytes { Array($0) }
 }
 
 let loadBundledFn = JSClosure { args in
     let metaJSON = args.first?.string
-    let tokenizer = decodeBytes(args.count > 1 ? args[1] : nil)
-    let modelBytes = decodeBytes(args.count > 2 ? args[2] : nil)
+    let tokenizer = typedArrayBytes(args.count > 1 ? args[1] : nil)
     return JSPromise { resolve in
         Task {
             do {
-                guard let metaJSON, let tokenizer, let modelBytes else { throw EmoError.modelNotFound }
-                guard let host = JSObject.global.__EmoHost.object,
-                      let createSession = host.createSession.object else {
-                    throw EmoError.modelNotFound
-                }
-                guard let promise = createSession(JSTypedArray<UInt8>(modelBytes).jsValue).object.flatMap(JSPromise.init) else {
-                    throw EmoError.predictionFailed
-                }
-                _ = try await promise.value
+                guard let metaJSON, let tokenizer else { throw EmoError.modelNotFound }
                 let assets = try ModelAssets(
                     metaJSON: metaJSON, tokenizer: tokenizer,
                     session: JSInferenceSession(hostGlobal: "__EmoHost"))

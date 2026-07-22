@@ -1,19 +1,30 @@
 // The emo-node test suite. Runs server-side in Node against the native core (the
-// `node` conditional-exports entry), with model files loaded from the local
-// resources instead of the Hugging Face Hub. The browser entry (WebAssembly +
+// `node` conditional-exports entry). The browser entry (WebAssembly +
 // LiteRT.js) is exercised by the headless-Chromium example.
+//
+// The npm package does not bundle the model: `Emo.load()` downloads it from the
+// Hugging Face Hub at the pinned revision and caches it. We cover both load
+// paths: the default HF download (hits the network, skipped when offline) and an
+// explicit `directory` that adopts self-hosted files from an offline fixture
+// (test/fixtures/model), so the offline/self-hosted story stays green with no
+// network.
 import assert from "node:assert/strict";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { test } from "node:test";
 
 import { Emo } from "../node.js";
 
-// The npm package bundles the LiteRT model (packages/emo-node/model), so the
-// default `Emo.load()` runs real on-device inference offline, no directory or
-// network needed.
+const HERE = path.dirname(fileURLToPath(import.meta.url));
+const FIXTURE_DIR = path.join(HERE, "fixtures", "model");
+
+// Prefer the offline fixture so the suite is hermetic; fall back to the default
+// HF download when the fixture is unavailable. Both exercise the same native
+// inference; only the resolve/adopt path differs.
 let emo;
 let loadError;
 try {
-  emo = await Emo.load();
+  emo = await Emo.load({ directory: FIXTURE_DIR });
 } catch (e) {
   loadError = e;
 }
@@ -44,3 +55,20 @@ test("empty input returns []", modelOpts, async () => {
 });
 
 test.after(() => emo?.dispose());
+
+// The default path downloads from the Hugging Face Hub at the pinned revision
+// and caches it. It needs network on a cold cache, so it is opt-in via
+// EMO_TEST_NETWORK=1 to keep the default suite hermetic.
+const networkOpts = process.env.EMO_TEST_NETWORK === "1"
+  ? {}
+  : { skip: "set EMO_TEST_NETWORK=1 to exercise the Hugging Face download path" };
+
+test("downloads from the Hugging Face Hub by default and caches", networkOpts, async () => {
+  const downloaded = await Emo.load();
+  try {
+    const suggestions = await downloaded.suggestions("Pay my bills", { limit: 3 });
+    assert.ok(suggestions.length > 0, "expected suggestions from the downloaded model");
+  } finally {
+    downloaded.dispose();
+  }
+});

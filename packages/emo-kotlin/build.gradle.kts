@@ -24,7 +24,7 @@ plugins {
 apply(from = "swift-android.gradle.kts")
 
 group = "ai.desertant"
-version = "0.8.0"
+version = "0.9.0"
 
 android {
     namespace = "ai.desertant.emo"
