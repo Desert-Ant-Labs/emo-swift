@@ -1,9 +1,10 @@
 // Serves the repo and runs browser.html in headless Chromium, exercising the
 // real on-device path: the Swift->wasm core + LiteRT.js inference on emo.tflite.
 //
-// Emo is a small model, so the npm package bundles it; the browser default
-// (`Emo.load()`) fetches the packaged model files (packages/emo-node/model)
-// relative to browser.js and runs entirely offline - no Hub, no download.
+// The npm package does not bundle the model: the browser default (`Emo.load()`)
+// downloads it from the Hugging Face Hub on first use and caches it (the browser
+// fetch cache). This harness serves the repo over HTTP and lets that download
+// hit the real Hub, so it needs network the first time.
 import http from "node:http";
 import { readFile } from "node:fs/promises";
 import path from "node:path";

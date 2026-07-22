@@ -15,6 +15,8 @@ const koffi = require("koffi");
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 
 const SKIN_TONES = { default: 0, light: 1, mediumLight: 2, medium: 3, mediumDark: 4, dark: 5 };
+const MODEL_REPO = "desert-ant-labs/emo";
+const MODEL_REVISION = "v0.7.0";
 
 // The prebuilt native for this host lives in native/<platform>-<arch>/ next to
 // this file (built by `mise run node-natives`): the self-contained Swift core
@@ -112,11 +114,13 @@ export class Emo {
   static async load(options = {}) {
     const l = loadLib();
     const onProgress = typeof options.onProgress === "function" ? options.onProgress : undefined;
-    // `directory == null` downloads this platform's files from HF at the pinned
-    // tag into the managed cache; an explicit `directory` adopts a folder the
-    // consumer self-hosts (offline). Same primitive either way.
+    // The Swift package still supports bundled resources for native apps. The
+    // npm package does not ship that bundle, so Node always passes an explicit
+    // model directory. By default it mirrors the native managed-cache layout;
+    // `directory` still adopts a consumer-provided folder for offline use.
     const cacheRoot = options.cacheRoot ?? path.join(os.homedir(), ".cache");
-    const handle = l.create(cacheRoot, options.directory ?? null);
+    const modelDirectory = options.directory ?? path.join(cacheRoot, "desert-ant-models", MODEL_REPO, MODEL_REVISION);
+    const handle = l.create(cacheRoot, modelDirectory);
     if (!handle) throw new Error("@desert-ant-labs/emo: failed to create suggester");
     const emo = new Emo(handle);
     // Ready the model now (download if needed) so the first suggestion is instant

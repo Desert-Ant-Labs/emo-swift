@@ -198,7 +198,7 @@ if [ "$(uname)" = "Darwin" ]; then
     # needs no LiteRT and ships no extra runtime. (Linux/Windows Node uses LiteRT
     # and the .tflite; the shared `inferenceSession(modelPath:)` picks per host.)
     KEY="darwin-$NARCH"; dest="packages/emo-node/native/$KEY"; rm -rf "$dest" && mkdir -p "$dest"
-    swift build -c release --product EmoNode -Xlinker -rpath -Xlinker @loader_path
+    swift build -c release --product EmoNode --disable-default-traits -Xlinker -rpath -Xlinker @loader_path
     cp ".build/release/libEmoNode.dylib" "$dest/"
 else
     KEY="linux-$NARCH"; dest="packages/emo-node/native/$KEY"; rm -rf "$dest" && mkdir -p "$dest"
@@ -212,7 +212,7 @@ else
         [ -n "$src" ] && ln -sf "$src" "$tmp/$(echo "$so" | sed 's/\\.so.*/.so/')" || true
     done
     LARCH=$([ "$NARCH" = "x64" ] && echo linux-x64 || echo linux-arm64)
-    DAL_INFERENCE_LITERT=1 swift build -c release --product EmoNode -Xswiftc -static-stdlib \\
+    DAL_INFERENCE_LITERT=1 swift build -c release --product EmoNode --disable-default-traits -Xswiftc -static-stdlib \\
         -Xlinker "-L$tmp" -Xlinker "-LVendor/litert/lib/$LARCH" -Xlinker -rpath -Xlinker '$ORIGIN' \\
         -Xlinker -z -Xlinker nodelete
     cp ".build/release/libEmoNode.so" "$dest/"
