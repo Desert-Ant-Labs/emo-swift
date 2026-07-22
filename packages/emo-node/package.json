@@ -1,10 +1,10 @@
 {
   "name": "@desert-ant-labs/emo",
-  "version": "0.9.2",
+  "version": "0.9.3",
   "description": "On-device multilingual emoji suggestion for JavaScript. Runs in the browser (WebAssembly + LiteRT.js) and server-side in Node (native), from one import.",
   "type": "module",
   "license": "SEE LICENSE IN LICENSE.md",
-  "homepage": "https://github.com/Desert-Ant-Labs/emo",
+  "homepage": "https://desertant.ai/models/emo/",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/Desert-Ant-Labs/emo.git",
