@@ -253,7 +253,7 @@ Default behavior:
 
 - Swift: bundles the Core ML model by default, with explicit-directory download/adopt still available.
 - Android: bundles the LiteRT model by default through the normal `ai.desertant:emo` dependency.
-- JavaScript: bundles the model in the npm package by default; the Node native runs Core ML on macOS and LiteRT on Linux, and the browser runs LiteRT.js.
+- JavaScript: downloads the model from Hugging Face on `Emo.load()` and caches it; the Node native runs Core ML on macOS and LiteRT on Linux, and the browser runs LiteRT.js. Node uses `directory` and browser uses `modelBaseUrl` for self-hosted or offline files.
 
 Passing an explicit `directory` makes that directory the model home. Existing valid files are adopted for offline use; otherwise Emo downloads into that directory and reuses it later.
 
