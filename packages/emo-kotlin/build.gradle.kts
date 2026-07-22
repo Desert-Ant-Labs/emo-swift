@@ -24,14 +24,14 @@ plugins {
 apply(from = "swift-android.gradle.kts")
 
 group = "ai.desertant"
-version = "0.7.0"
+version = "0.8.0"
 
 android {
     namespace = "ai.desertant.emo"
     compileSdk = 35
 
     defaultConfig {
-        minSdk = 31 // platform libicu (NFKC) is available from API 31
+        minSdk = 24 // NFKC now runs via the host java.text.Normalizer (API 1+), no platform libicu
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         ndk { abiFilters += listOf("arm64-v8a", "x86_64") }
     }
