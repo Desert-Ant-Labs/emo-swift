@@ -51,4 +51,4 @@ Server-side native builds ship for linux-x64, linux-arm64, and darwin-arm64. Oth
 
 ## License
 
-[Desert Ant Labs Source-Available License 1.0](./LICENSE.md): free below 100,000 monthly active devices per platform. Above that a commercial license is required. Full terms: https://license.desertant.ai/1.0
+[Desert Ant Labs Source-Available License 1.0](./LICENSE.md): free below 100,000 monthly active devices per platform. Above that a commercial license is required. Full terms: https://license.desertant.com/1.0
