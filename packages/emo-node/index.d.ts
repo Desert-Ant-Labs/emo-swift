@@ -59,9 +59,15 @@ export interface LoadOptions {
 }
 
 /**
- * On-device multilingual emoji suggestion for JavaScript. The same import runs
- * in the browser (WebAssembly + LiteRT.js) and server-side in Node (a prebuilt
- * native core), selected automatically by conditional exports. Create one with
+ * On-device multilingual emoji suggestion for JavaScript. The default
+ * `@desert-ant-labs/emo` import is the browser WebAssembly + LiteRT.js build: it
+ * has no native dependencies, so it builds cleanly for every target of a
+ * multi-target bundler (Next, Remix, SvelteKit, Nuxt) and is safe to import
+ * during server-side rendering. LiteRT.js initializes only in a browser or Web
+ * Worker, so `Emo.load()` runs inference in the browser; in plain Node it throws
+ * and directs you to the native build. For server-side inference in Node import
+ * `@desert-ant-labs/emo/native` (a prebuilt native core, no `@litertjs/core`)
+ * from server-only code. Both expose this same `Emo` API. Create one with
  * `await Emo.load(...)` and reuse it.
  *
  * ```ts
@@ -81,6 +87,7 @@ export declare class Emo {
    * suggestions; empty input returns `[]`.
    */
   suggestions(text: string, options?: SuggestOptions): Promise<EmoSuggestion[]>;
-  /** Free the native handle (Node). No-op in the browser. Call when done. */
+  /** Free native resources (the `@desert-ant-labs/emo/native` build). No-op in
+   * the default WebAssembly build. Safe to call in both. */
   dispose(): void;
 }

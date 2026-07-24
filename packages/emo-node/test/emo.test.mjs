@@ -1,6 +1,6 @@
 // The emo-node test suite. Runs server-side in Node against the native core (the
-// `node` conditional-exports entry). The browser entry (WebAssembly +
-// LiteRT.js) is exercised by the headless-Chromium example.
+// `@desert-ant-labs/emo/native` entry, i.e. node.js). The default universal
+// WebAssembly + LiteRT.js entry is exercised by the headless-Chromium example.
 //
 // The npm package does not bundle the model: `Emo.load()` downloads it from the
 // Hugging Face Hub at the pinned revision and caches it. We cover both load
